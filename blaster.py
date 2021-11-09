@@ -1,11 +1,9 @@
 from msgParser import MsgParser
 
-import os
 import random
 import socket
 import threading
 import hashlib
-from dotenv import load_dotenv
 
 PRIVATE_KEY = 131
 PUBLIC_BASE = 13
@@ -58,17 +56,7 @@ class Blaster(threading.Thread, MsgParser):
 
 if __name__ == '__main__':
 
-    load_dotenv()
-
-    address = os.getenv('ADDRESS')
-    if address is None:
-        errMsg = '''
-            no field named \'ADDRESS\' in .env file.
-            Create a .env file with ADDRESS as the target peer IP address
-            e.g. ADDRESS=127.0.0.1
-        '''
-        print(errMsg)
-        exit()
+    address = input("enter target peer address:")
 
     blaster = Blaster(address=address, port=8080, name='Daniel')
     blaster.start()

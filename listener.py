@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     load_dotenv()
 
-    address = os.getenv('ADDRESS')
+    address = os.getenv('LISTENER_ADDRESS')
     if address is None:
         errMsg = '''
             no field named \'ADDRESS\' in .env file.
