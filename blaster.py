@@ -9,6 +9,8 @@ PRIVATE_KEY = 131
 PUBLIC_BASE = 13
 PUBLIC_MOD = 97
 
+from listener import user_ip_combos
+
 class Blaster(threading.Thread, MsgParser):
     def __init__(self, address='127.0.0.1', port=8080, name='Anon'):
         threading.Thread.__init__(self)
@@ -57,8 +59,24 @@ class Blaster(threading.Thread, MsgParser):
 if __name__ == '__main__':
     nameInput = input("What is your name? ")
 
-    address = input("enter target peer address: ")
+    if nameInput not in user_ip_combos:
+        ip_addr = input("What is your IP address? ")
+        user_ip_combos[nameInput] = ip_addr
+    
+    print(user_ip_combos)
 
-    blaster = Blaster(address=address, port=8080, name=nameInput)
+    friendFound = False
+    while not friendFound:
+        friendName = input("Enter the name of the person to connect with: ")
+        if friendName in user_ip_combos:
+            friend_ip = user_ip_combos[friendName]
+            print("user found, initiating connection")
+            friendFound = True
+        else:
+            print("user not found, please try again")
+        
+    #address = input("enter target peer address: ")
+
+    blaster = Blaster(address=friend_ip, port=8080, name=nameInput)
     blaster.start()
     

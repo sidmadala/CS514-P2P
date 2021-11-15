@@ -7,6 +7,11 @@ import threading
 import hashlib
 from dotenv import load_dotenv
 
+# import user_db
+# from user_db import user_ip_combos
+
+user_ip_combos = {}
+
 PRIVATE_KEY = 251
 PUBLIC_BASE = 13
 PUBLIC_MOD = 97
@@ -74,7 +79,8 @@ class Listener(threading.Thread, MsgParser):
             newClient.start()
 
 if __name__ == '__main__':
-
+    # user_db.initialize()
+    
     load_dotenv()
 
     address = os.getenv('LISTENER_ADDRESS')
@@ -86,6 +92,11 @@ if __name__ == '__main__':
         print(errMsg)
         exit()
 
+
     nameInput = input("What is your name? ")
+    if nameInput not in user_ip_combos:
+        user_ip_combos[nameInput] = address
+
+    print(user_ip_combos)
     listener = Listener(address=address, port=8080, name=nameInput)
     listener.start()
