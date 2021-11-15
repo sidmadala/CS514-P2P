@@ -86,5 +86,6 @@ if __name__ == '__main__':
         print(errMsg)
         exit()
 
-    listener = Listener(address=address, port=8080, name='Gunther')
+    nameInput = input("What is your name? ")
+    listener = Listener(address=address, port=8080, name=nameInput)
     listener.start()

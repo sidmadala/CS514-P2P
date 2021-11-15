@@ -55,9 +55,10 @@ class Blaster(threading.Thread, MsgParser):
                 print(f"[ACK received from {receiverName}]")
 
 if __name__ == '__main__':
+    nameInput = input("What is your name? ")
 
     address = input("enter target peer address:")
 
-    blaster = Blaster(address=address, port=8080, name='Daniel')
+    blaster = Blaster(address=address, port=8080, name=nameInput)
     blaster.start()
     
