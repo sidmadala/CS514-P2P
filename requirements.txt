@@ -1,0 +1,10 @@
+loguru~=0.5.3
+redis~=3.5.3
+dnspython
+pymongo~=3.12.1
+pycryptodome
+SimpleWebSocketServer~=0.1.1
+autobahn~=21.3.1
+Twisted~=21.7.0
+pyjwt
+eventfd
