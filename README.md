@@ -4,10 +4,7 @@ P2P chat and file sharing application written in Python
 
 # Demo
 
-
-https://user-images.githubusercontent.com/42743644/142772011-20d52bec-5879-47ce-8802-c24d70267d13.mp4
-
-
+https://drive.google.com/file/d/1keD73nwK7cVr1lMl4EpD4y9LE9MP1BUp/view?usp=sharing
 
 # Description of Files
 **Common.py**
