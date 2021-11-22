@@ -60,6 +60,10 @@ class ServerHandler(WebSocket):
         )
 
     def login_handler(self, data):
+        """
+        User login, fetch from DB, check if password matches.
+        :param data: Dict
+        """
         if 'username' not in data.keys() or 'password' not in data.keys():
             self.reply_error('Invalid message.')
         users = db.users
@@ -75,6 +79,7 @@ class ServerHandler(WebSocket):
             self.reply_error('Incorrect password.')
             return
 
+        # Encode user name using Json web Token. It could use as client session. The user cannot decode it since he doesn't have SERVER_SECRET.
         encoded_jwt = jwt.encode({"username": data['username'], 'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')},
                                  SERVER_SECRET, algorithm="HS256")
         redis_0.setex(data['username'], 3600, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
@@ -85,6 +90,10 @@ class ServerHandler(WebSocket):
         self.sendMessage(reply_str)
 
     def register_handler(self, data):
+        """
+        Create a new user, write DB.
+        :param data:
+        """
         if 'username' not in data.keys() or 'password' not in data.keys():
             self.reply_error('Invalid message.')
         users = db.users
@@ -104,6 +113,10 @@ class ServerHandler(WebSocket):
         self.sendMessage(reply_str)
 
     def get_user_handler(self, data):
+        """
+        Return all online users.
+        :param data: Dict
+        """
         if 'token' not in data.keys():
             self.reply_error('Please log in first')
         content = jwt.decode(data['token'], SERVER_SECRET, algorithms="HS256")
@@ -115,6 +128,10 @@ class ServerHandler(WebSocket):
         self.sendMessage(reply_str)
 
     def request_connection_handler(self, data):
+        """
+        One peer wants to connect with another peer. Forward the request to another peer to see if he/she agrees.
+        :param data: Dict
+        """
         if 'token' not in data.keys():
             self.reply_error('Please log in first')
         content = jwt.decode(data['token'], SERVER_SECRET, algorithms="HS256")
@@ -130,6 +147,10 @@ class ServerHandler(WebSocket):
             self.reply_error('{} seems offline, try later.'.format(username))
 
     def p2p_agree_handler(self, data):
+        """
+        If another peer agrees to chat, server sends peer B's (IP, port) to peer A and sends peer A's (IP, port) to B.
+        :param data: Dict
+        """
         if 'token' not in data.keys():
             self.reply_error('Please log in first')
         content = jwt.decode(data['token'], SERVER_SECRET, algorithms="HS256")
@@ -154,7 +175,7 @@ class ServerHandler(WebSocket):
 
     @logger.catch
     def handleMessage(self):
-        msg_lst = self.data.split(CRLF)
+        msg_lst = self.data.split(CRLF) # multiple messages could arrive at the same time
         msg_lst = list(filter(lambda s: s != "", msg_lst))
         for msg_text in msg_lst:
             try:
@@ -163,6 +184,9 @@ class ServerHandler(WebSocket):
                 if ('type' not in msg.keys()) or ('data' not in msg.keys()):
                     self.reply_error('Invalid message.')
                     continue
+
+                # msg['type'] defines the kind of request the client makes
+                # msg['type'] defined as MsgType in common.py
                 if msg['type'] == MsgType.LOGIN:
                     self.login_handler(msg['data'])
                 elif msg['type'] == MsgType.REGISTER:
@@ -182,6 +206,10 @@ class ServerHandler(WebSocket):
 
     @logger.catch
     def handleClose(self):
+        """
+        Called when ws connection closed.
+        Clear user information in memory and redis.
+        """
         if self.address in client_name.keys():
             username = client_name[self.address]
             redis_0.delete(username)
@@ -194,7 +222,11 @@ class ServerHandler(WebSocket):
 
 if __name__ == '__main__':
     logger.add('server.log')
+
+    # Server uses WS for persistent connection.
     server = SimpleWebSocketServer('', 9995, ServerHandler)
+
+    # Server open a UDP socket to retrieve clients' UDP socket IP and port (after NAT)
     udp_thread = threading.Thread(target=run_server_udp, args=())
     udp_thread.start()
     server.serveforever()

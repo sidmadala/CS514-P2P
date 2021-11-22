@@ -17,19 +17,20 @@ import queue
 from common import CRLF, MsgType, ServerResponse, ClientChildCmd, ChatType, SERVER_IP, SERVER_PORT
 from Chat import child_process
 
-token = None
-child = None
-peer_ip = None
-peer_port = None
-evefd = EventFD()
-msg_queue = queue.Queue()
-recv_queue = queue.Queue()
+token = None  # user's token
+child = None  # child thread to run UDP socket
+peer_ip = None  # set when receive ServerResponse.PUNCH, peer's IP
+peer_port = None  # set when receive ServerResponse.PUNCH, peer's port
+evefd = EventFD()  # fd used to wake child thread when new commands inserted to recv_queue
+msg_queue = queue.Queue()  # thread safe queue, containing message from child thread to main thread
+recv_queue = queue.Queue()  # thread safe queue, containing message from client's main thread (run WS and GUI) to
+                            # child thread (run UDP socket)
 
 
 class MyClientProtocol(WebSocketClientProtocol):
 
     def onConnect(self, response):
-        self.factory.connected = self
+        self.factory.connected = self  # needs send message later
 
     # def onClose(self, wasClean, code, reason):
     #     global app
@@ -49,9 +50,13 @@ class MyClientProtocol(WebSocketClientProtocol):
                 messagebox.showinfo(title='info', message='Login in success')
                 global token
                 token = msg['token']
+
+                # display login message
                 app.text.configure(state='normal')
                 app.text.insert(END, "[INFO] successfully login as {}\n".format(msg['username']))
                 app.text.configure(state='disabled')
+
+                # launch child thread
                 global child
                 child = threading.Thread(target=child_process, args=(token, evefd, msg_queue, recv_queue))
                 child.start()
@@ -60,6 +65,7 @@ class MyClientProtocol(WebSocketClientProtocol):
                 if len(msg['content']) == 0:
                     messagebox.showinfo(title='success', message='Sorry, no other users online now.')
                 else:
+                    # display all online users except the current user
                     app.text.configure(state='normal')
                     app.text.insert(END, '[INFO] current online user:\n')
                     # app.text.delete(1.0, "end")
@@ -67,12 +73,15 @@ class MyClientProtocol(WebSocketClientProtocol):
                         app.text.insert(END, u + '\n')
                     app.text.configure(state='disabled')
             elif msg['result'] == ServerResponse.REQUEST:
+                # another peer wants to establish connection with the current
                 answer = askyesno(title='chat request',
                                   message='{} wants to start chat with you. Do you allow the chat to start?'.format(msg['content']['username']))
                 if answer:
+                    # if agrees, let server sends peer's IP and port
                     reply = {'type': MsgType.AGREE_P2P, 'data': {'token': token, 'peer': msg['content']['username']}}
                     self.sendMessage(json.dumps(reply).encode())
             elif msg['result'] == ServerResponse.PUNCH:
+                # push PUNCH to recv_queue so the child thread will send packet
                 recv_queue.put(msg['content'], block=False)
                 evefd.set()
                 global peer_ip, peer_port
@@ -138,6 +147,9 @@ class App(object):
         Button(self.login_screen, text="Login", width=10, height=1, bg="blue", command=self.login_action).pack()
 
     def login_action(self):
+        """
+        sends login information to the server
+        """
         if token is None:
             username = self.username_entry.get()
             password = self.password_entry.get()
@@ -181,7 +193,7 @@ class App(object):
         Button(self.register_screen, text="Register", width=10, height=1, bg="blue", command=self.register_action).pack()
 
     def register_action(self):
-        if token is None:
+        if token is None: # if user already login, he/she cannot register
             username = self.register_username_entry.get()
             password = self.register_password_entry.get()
             msg = json.dumps({'type': MsgType.REGISTER, 'data':
@@ -193,6 +205,7 @@ class App(object):
             messagebox.showinfo(title='info', message='Already Log in.')
 
     def get_user_action(self):
+        # send request to get all online users to server
         if token is not None:
             msg = json.dumps({'type': MsgType.GET_ACTIVE_USER, 'data':
                              {'token': token}})
@@ -202,6 +215,7 @@ class App(object):
             messagebox.showerror(title='error', message='Please log in first.')
 
     def request_connection_action(self):
+        # request to start p2p with another peer
         if token is not None:
             username = self.connect_entry.get()
             msg = json.dumps({'type': MsgType.REQUEST_CONNECT, 'data': {'token': token, 'target': username}})
@@ -211,6 +225,7 @@ class App(object):
             messagebox.showerror(title='error', message='Please log in first.')
 
     def send_chat_message_action(self):
+        # send chatting message. First push the message to recv_queue, then the child thread sends the message using UDP socket
         if token is not None:
             if peer_port is not None and peer_ip is not None:
                 chat_message = self.chat_entry.get()
@@ -222,6 +237,9 @@ class App(object):
             messagebox.showerror(title='error', message='Please log in first.')
 
     def refresh_chat(self):
+        """
+        refresh GUI every 1000ms
+        """
         while not msg_queue.empty():
             msg = msg_queue.get()
             if msg['type'] == ChatType.SEND:

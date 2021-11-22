@@ -23,6 +23,8 @@ class UDPRequestHandler(BaseRequestHandler):
                 msg = json.loads(msg_text.strip(CRLF))
                 if 'token' in msg.keys():
                     content = jwt.decode(msg['token'], SERVER_SECRET, algorithms="HS256")
+
+                    # store {username: {ip, port}} to Redis db 1 as Redis Hash.
                     self.server.redis.hset(content['username'], mapping={'ip': self.client_address[0], 'port': self.client_address[1]})
 
         except Exception as e:
