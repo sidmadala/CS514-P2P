@@ -55,12 +55,12 @@ class MyClientProtocol(WebSocketClientProtocol):
         global root
         if isBinary:
             #msg = json.loads(payload.decode())
+
+            # attempt to decrypt the message
             try:
-                # check if the message is encrypted
                 msg = Crypter.decrypt(payload, self.sharedKey)
                 msg = json.loads(msg)
             except:
-                # otherwise parse if as unencrypted
                 msg = json.loads(payload.decode())
 
             if msg['result'] == ServerResponse.SUCCESS:
@@ -100,7 +100,10 @@ class MyClientProtocol(WebSocketClientProtocol):
                 if answer:
                     # if agrees, let server sends peer's IP and port
                     reply = {'type': MsgType.AGREE_P2P, 'data': {'token': token, 'peer': msg['content']['username']}}
-                    self.sendMessage(json.dumps(reply).encode())
+                    # self.sendMessage(json.dumps(reply).encode())
+                    reply = json.dumps(reply)
+                    self.sendMessage(Crypter.encrypt(reply, self.sharedKey))
+
             elif msg['result'] == ServerResponse.PUNCH:
                 # push PUNCH to recv_queue so the child thread will send packet
                 recv_queue.put(msg['content'], block=False)

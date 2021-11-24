@@ -209,6 +209,13 @@ class ServerHandler(WebSocket):
 
     @logger.catch
     def handleMessage(self):
+
+        # attempt to decrypt the message
+        try:
+            self.data = Crypter.decrypt(self.data, activeConnections[self.address])
+        except:
+            pass
+
         msg_lst = self.data.split(CRLF) # multiple messages could arrive at the same time
         msg_lst = list(filter(lambda s: s != "", msg_lst))
         for msg_text in msg_lst:
