@@ -225,7 +225,7 @@ if __name__ == '__main__':
     logger.add('server.log')
 
     # Server uses WS for persistent connection.
-    server = SimpleWebSocketServer('', 9995, ServerHandler)
+    server = SimpleWebSocketServer('0.0.0.0', 9995, ServerHandler)
 
     # Server open a UDP socket to retrieve clients' UDP socket IP and port (after NAT)
     udp_thread = threading.Thread(target=run_server_udp, args=())
