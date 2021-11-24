@@ -40,7 +40,7 @@ class ServerHandler(WebSocket):
         reply_str = json.dumps(reply).encode()
         self.sendMessage(reply_str)
 
-    def hash_new_password(password: str) -> Tuple[bytes, bytes]:
+    def hash_new_password(self, password: str) -> Tuple[bytes, bytes]:
         """
         Hash the provided password with a randomly-generated salt and return the
         salt and hash to store in the database.
@@ -49,14 +49,15 @@ class ServerHandler(WebSocket):
         pw_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
         return salt, pw_hash
 
-    def is_correct_password(salt: bytes, pw_hash: bytes, password: str) -> bool:
+    def is_correct_password(self, salt, pw_hash, password: str) -> bool:
         """
         Given a previously-stored salt and hash, and a password provided by a user
         trying to log in, check whether the password is correct.
         """
+        input_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
         return hmac.compare_digest(
             pw_hash,
-            hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
+            input_hash
         )
 
     def login_handler(self, data):
@@ -75,7 +76,7 @@ class ServerHandler(WebSocket):
 
         salt = user['salt']
         password_hash = user['password']
-        if self.is_correct_password(salt, password_hash, data['password']):
+        if not self.is_correct_password(salt, password_hash, data['password']):
             self.reply_error('Incorrect password.')
             return
 
