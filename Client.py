@@ -2,7 +2,7 @@
 Created by Xianghui on 2021/11/16.
 """
 
-import json
+import json, random
 import threading
 from tkinter import messagebox
 from tkinter.messagebox import askyesno
@@ -15,7 +15,9 @@ from eventfd import EventFD
 import queue
 
 from common import CRLF, MsgType, ServerResponse, ClientChildCmd, ChatType, SERVER_IP, SERVER_PORT
+from common import PUBLIC_MOD, PUBLIC_BASE
 from Chat import child_process
+from crypter import Crypter
 
 token = None  # user's token
 child = None  # child thread to run UDP socket
@@ -32,6 +34,17 @@ class MyClientProtocol(WebSocketClientProtocol):
     def onConnect(self, response):
         self.factory.connected = self  # needs send message later
 
+        self.privateKey = random.randint(1001, 9999)
+        clientPublicKey = (PUBLIC_BASE**self.privateKey)%PUBLIC_MOD
+
+        reply = {
+            'type': MsgType.EXCHANGE, 
+            'data': {
+                'clientPublicKey': clientPublicKey
+            }
+        }
+        self.sendMessage(json.dumps(reply).encode())
+
     # def onClose(self, wasClean, code, reason):
     #     global app
     #     print(code)
@@ -41,7 +54,15 @@ class MyClientProtocol(WebSocketClientProtocol):
     def onMessage(self, payload, isBinary):
         global root
         if isBinary:
-            msg = json.loads(payload.decode())
+            #msg = json.loads(payload.decode())
+            try:
+                # check if the message is encrypted
+                msg = Crypter.decrypt(payload, self.sharedKey)
+                msg = json.loads(msg)
+            except:
+                # otherwise parse if as unencrypted
+                msg = json.loads(payload.decode())
+
             if msg['result'] == ServerResponse.SUCCESS:
                 messagebox.showinfo(title='success', message=msg['content'])
             elif msg['result'] == ServerResponse.FAIL:
@@ -90,6 +111,10 @@ class MyClientProtocol(WebSocketClientProtocol):
                 app.text.configure(state='normal')
                 app.text.insert(END, "[INFO] start UDP punching\n")
                 app.text.configure(state='disabled')
+            elif msg['result'] == ServerResponse.EXCHANGE:
+                # receive public key from server
+                serverPublicKey = int(msg['content']['serverPublicKey'])
+                self.sharedKey = str((serverPublicKey**self.privateKey)%PUBLIC_MOD)
 
             print("Text message received: {0}".format(payload.decode('utf8')))
 

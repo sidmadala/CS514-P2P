@@ -2,7 +2,7 @@
 Created by Xianghui on 2021/11/16.
 """
 
-import json
+import json, random
 import threading
 from datetime import datetime
 from json import JSONDecodeError
@@ -17,12 +17,15 @@ import hmac
 from typing import Tuple
 
 from common import CRLF, ServerResponse, MsgType, ClientChildCmd
+from common import PUBLIC_BASE, PUBLIC_MOD
 from ServerUDP import run_server_udp
+from crypter import Crypter
 
 mongo = MongoClient("mongodb+srv://xianghui:hdrw9jytsQRTjbV@cluster0.gvzcr.mongodb.net/myFirstDatabase?retryWrites=true&w=majority")
 db = mongo['myFirstDatabase']
 client_addr = {}
 client_name = {}
+activeConnections = {}
 redis_0 = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 redis_1 = redis.Redis(host='localhost', port=6379, db=1, decode_responses=True)
 SERVER_SECRET = "hdrw9jytsQRTjbV"
@@ -32,13 +35,18 @@ class ServerHandler(WebSocket):
 
     def reply_error(self, msg):
         reply = {'result': ServerResponse.FAIL, 'content': msg}
-        reply_str = json.dumps(reply).encode()
-        self.sendMessage(reply_str)
+        # reply_str = json.dumps(reply).encode()
+        # self.sendMessage(reply_str)
+        reply_str = json.dumps(reply)
+        self.sendMessage(Crypter.encrypt(reply_str, activeConnections[self.address]))
+
 
     def reply_success(self, msg):
         reply = {'result': ServerResponse.SUCCESS, 'content': msg}
-        reply_str = json.dumps(reply).encode()
-        self.sendMessage(reply_str)
+        # reply_str = json.dumps(reply).encode()
+        # self.sendMessage(reply_str)
+        reply_str = json.dumps(reply)
+        self.sendMessage(Crypter.encrypt(reply_str, activeConnections[self.address]))
 
     def hash_new_password(self, password: str) -> Tuple[bytes, bytes]:
         """
@@ -85,10 +93,14 @@ class ServerHandler(WebSocket):
                                  SERVER_SECRET, algorithm="HS256")
         redis_0.setex(data['username'], 3600, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         reply = {'result': ServerResponse.LOGIN_SUCCESS, 'token': encoded_jwt.decode(), 'username': data['username']}
-        reply_str = json.dumps(reply).encode()
+        # reply_str = json.dumps(reply).encode()
+
+        reply_str = json.dumps(reply)
+
         client_addr[data['username']] = self
         client_name[self.address] = data['username']
-        self.sendMessage(reply_str)
+        # self.sendMessage(reply_str)
+        self.sendMessage(Crypter.encrypt(reply_str, activeConnections[self.address]))
 
     def register_handler(self, data):
         """
@@ -108,10 +120,13 @@ class ServerHandler(WebSocket):
         encoded_jwt = jwt.encode({"username": data['username'], 'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}, SERVER_SECRET, algorithm="HS256")
         redis_0.setex(data['username'], 3600, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         reply = {'result': ServerResponse.LOGIN_SUCCESS, 'token': encoded_jwt.decode(), 'username': data['username']}
-        reply_str = json.dumps(reply).encode()
+        # reply_str = json.dumps(reply).encode()
+        reply_str = json.dumps(reply)
+
         client_addr[data['username']] = self
         client_name[self.address] = data['username']
-        self.sendMessage(reply_str)
+        # self.sendMessage(reply_str)
+        self.sendMessage(Crypter.encrypt(reply_str, activeConnections[self.address]))
 
     def get_user_handler(self, data):
         """
@@ -125,8 +140,11 @@ class ServerHandler(WebSocket):
         all_users = list(client_addr.keys())
         other_user = list(filter(lambda u: u != username, all_users))
         reply = {'result': ServerResponse.USER_LIST, 'content': other_user}
-        reply_str = json.dumps(reply).encode()
-        self.sendMessage(reply_str)
+        # reply_str = json.dumps(reply).encode()
+        # self.sendMessage(reply_str)
+
+        reply_str = json.dumps(reply)
+        self.sendMessage(Crypter.encrypt(reply_str, activeConnections[self.address]))
 
     def request_connection_handler(self, data):
         """
@@ -174,6 +192,21 @@ class ServerHandler(WebSocket):
             client_addr[peer1].sendMessage(reply.encode())
             client_addr[peer2].sendMessage(reply.encode())
 
+    def send_public_key(self, data):
+        '''reply the client with server's public key, and compute the shared key
+        
+        '''
+        clientPublicKey = data['clientPublicKey']
+        self.privateKey = random.randint(1001, 9999)
+        serverPublicKey = (PUBLIC_BASE**self.privateKey)%PUBLIC_MOD
+
+        reply = json.dumps({'result': ServerResponse.EXCHANGE,
+                            'content': {'serverPublicKey': serverPublicKey}})
+
+        self.sendMessage(reply.encode())
+        sharedKey = str((clientPublicKey**self.privateKey)%PUBLIC_MOD)
+        activeConnections[self.address] = sharedKey
+
     @logger.catch
     def handleMessage(self):
         msg_lst = self.data.split(CRLF) # multiple messages could arrive at the same time
@@ -198,6 +231,8 @@ class ServerHandler(WebSocket):
                     self.request_connection_handler(msg['data'])
                 elif msg['type'] == MsgType.AGREE_P2P:
                     self.p2p_agree_handler(msg['data'])
+                elif msg['type'] == MsgType.EXCHANGE:
+                    self.send_public_key(msg['data'])
 
             except JSONDecodeError as e:
                 self.reply_error('Invalid message.')
@@ -218,6 +253,10 @@ class ServerHandler(WebSocket):
             del client_name[self.address]
             if username in client_addr.keys():
                 del client_addr[username]
+
+        if self.address in activeConnections.keys():
+            del activeConnections[self.address]
+
         logger.info('[{}] disconnected.'.format(self.address))
 
 

@@ -8,6 +8,8 @@ CRLF = "\r\n"
 SERVER_IP = "localhost"
 SERVER_PORT = 9995
 SERVER_UDP_PORT = 9996
+PUBLIC_BASE = 13
+PUBLIC_MOD = 97
 
 @unique
 class MsgType(str, Enum):
@@ -17,6 +19,7 @@ class MsgType(str, Enum):
     REQUEST_CONNECT = "REQUEST_CONNECT"
     AGREE_P2P = "AGREE_P2P"
     PING = "PING"
+    EXCHANGE = "EXCHANGE"
 
 
 @unique
@@ -28,6 +31,7 @@ class ServerResponse(str, Enum):
     REQUEST = "REQUEST"
     UDP_PING = "UDP_PING"
     PUNCH = "PUNCH"
+    EXCHANGE = "EXCHANGE"
 
 
 @unique
