@@ -9,9 +9,12 @@ import socket
 import time
 
 from common import SERVER_IP, SERVER_UDP_PORT, ClientChildCmd, ChatType
+from common import PUBLIC_MOD
+from crypter import Crypter
 
+sharedKey = ''
 
-def event_loop(token, msg_queue, recv_queue, evefd, udp_socket):
+def event_loop(token, msg_queue, recv_queue, evefd, udp_socket, ownPrivateKey):
     """
     Simple reactor based on epoll. Monitor EPOLLIN event from eventfd and UDP socket
     :param token: user token
@@ -34,12 +37,20 @@ def event_loop(token, msg_queue, recv_queue, evefd, udp_socket):
                     msg = recv_queue.get()
                     print('Child process receive from parent: ', msg)
                     if msg['cmd'] == ClientChildCmd.PUNCH:  # send UDP punching packet
+
+                        otherPublicKey = int(msg['repliedPublicKey'])
+                        sharedKey = str((otherPublicKey**ownPrivateKey)%PUBLIC_MOD)                        
+
                         udp_socket.sendto(json.dumps({'type': ChatType.PUNCH}).encode(), (msg['ip'], int(msg['port'])))
                         # msg_queue.put(msg)
                         peer_ip = msg["ip"]
                         peer_port = int(msg['port'])
                     elif msg['cmd'] == ClientChildCmd.SEND:  # send chat message
-                        udp_socket.sendto(json.dumps({'type': ChatType.MESSAGE, 'content': msg['content']}).encode(), (msg['ip'], msg['port']))
+                        reply = json.dumps({'type': ChatType.MESSAGE, 'content': msg['content']})
+                        reply = Crypter.encrypt(reply, sharedKey)
+
+                        # udp_socket.sendto(json.dumps({'type': ChatType.MESSAGE, 'content': msg['content']}).encode(), (msg['ip'], msg['port']))
+                        udp_socket.sendto(reply, (msg['ip'], msg['port']))
                         msg_queue.put({'type': ChatType.SEND, 'content': msg['content']})
                     else:
                         return
@@ -49,7 +60,14 @@ def event_loop(token, msg_queue, recv_queue, evefd, udp_socket):
                     try:
                         msg, peer_addr = udp_socket.recvfrom(1024)  # receive from another peer
                         print('Child process receive {} from {}'.format(msg, peer_addr))
-                        msg_load = json.loads(msg.decode())
+
+                        try:
+                            msg = Crypter.decrypt(msg, sharedKey)
+                        except:
+                            msg = msg.decode()
+
+                        # msg_load = json.loads(msg.decode())
+                        msg_load = json.loads(msg)
                         if msg_load['type'] == ChatType.MESSAGE:
                             # buffer the chat message to msg_queue and main thread will check msg_queue and display
                             msg_queue.put({"type": ChatType.MESSAGE, "ip": peer_addr[0], "port": peer_addr[1], "content": msg_load["content"]})
@@ -68,6 +86,6 @@ def event_loop(token, msg_queue, recv_queue, evefd, udp_socket):
         udp_socket.sendto(json.dumps({'token': token}).encode(), (SERVER_IP, SERVER_UDP_PORT))
 
 
-def child_process(token, evefd, msg_queue, recv_queue):
+def child_process(token, evefd, msg_queue, recv_queue, ownPrivateKey):
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    event_loop(token, msg_queue, recv_queue, evefd, udp_sock)
+    event_loop(token, msg_queue, recv_queue, evefd, udp_sock, ownPrivateKey)

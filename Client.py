@@ -35,12 +35,12 @@ class MyClientProtocol(WebSocketClientProtocol):
         self.factory.connected = self  # needs send message later
 
         self.privateKey = random.randint(1001, 9999)
-        clientPublicKey = (PUBLIC_BASE**self.privateKey)%PUBLIC_MOD
+        self.clientPublicKey = (PUBLIC_BASE**self.privateKey)%PUBLIC_MOD
 
         reply = {
             'type': MsgType.EXCHANGE, 
             'data': {
-                'clientPublicKey': clientPublicKey
+                'clientPublicKey': self.clientPublicKey
             }
         }
         self.sendMessage(json.dumps(reply).encode())
@@ -79,7 +79,7 @@ class MyClientProtocol(WebSocketClientProtocol):
 
                 # launch child thread
                 global child
-                child = threading.Thread(target=child_process, args=(token, evefd, msg_queue, recv_queue))
+                child = threading.Thread(target=child_process, args=(token, evefd, msg_queue, recv_queue, self.privateKey))
                 child.start()
             elif msg['result'] == ServerResponse.USER_LIST:
 
@@ -181,8 +181,14 @@ class App(object):
         if token is None:
             username = self.username_entry.get()
             password = self.password_entry.get()
-            msg = json.dumps({'type': MsgType.LOGIN, 'data':
-                             {'username': username, 'password': password}})
+            msg = json.dumps({
+                'type': MsgType.LOGIN, 
+                'data':{
+                    'username': username, 
+                    'password': password,
+                    'clientPublicKey': self.factory.connected.clientPublicKey
+                }
+            })
             msg += CRLF
             self.send(msg)
             self.login_screen.destroy()

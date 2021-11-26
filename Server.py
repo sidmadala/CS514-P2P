@@ -25,7 +25,8 @@ mongo = MongoClient("mongodb+srv://xianghui:hdrw9jytsQRTjbV@cluster0.gvzcr.mongo
 db = mongo['myFirstDatabase']
 client_addr = {}
 client_name = {}
-activeConnections = {}
+activeConnections = {} # key: address, value: client/server shared key
+clientPublicKeys = {} # key: username, value: client public key
 redis_0 = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 redis_1 = redis.Redis(host='localhost', port=6379, db=1, decode_responses=True)
 SERVER_SECRET = "hdrw9jytsQRTjbV"
@@ -101,6 +102,8 @@ class ServerHandler(WebSocket):
         client_name[self.address] = data['username']
         # self.sendMessage(reply_str)
         self.sendMessage(Crypter.encrypt(reply_str, activeConnections[self.address]))
+
+        clientPublicKeys[data['username']] = data['clientPublicKey']
 
     def register_handler(self, data):
         """
@@ -178,12 +181,29 @@ class ServerHandler(WebSocket):
         peer1_addr = redis_1.hgetall(peer1)
         peer2_addr = redis_1.hgetall(peer2)
         if peer1 in client_addr.keys() and peer2 in client_addr.keys() and peer1_addr is not None and peer2_addr is not None:
-            reply1 = json.dumps({'result': ServerResponse.PUNCH,
-                                 'content': {'target': peer2, 'me': peer1, 'ip': peer2_addr['ip'],
-                                             'port': peer2_addr['port'], 'cmd': ClientChildCmd.PUNCH}})
-            reply2 = json.dumps({'result': ServerResponse.PUNCH,
-                                 'content': {'target': peer1, 'me': peer2, 'ip': peer1_addr['ip'],
-                                             'port': peer1_addr['port'], 'cmd': ClientChildCmd.PUNCH}})
+            reply1 = json.dumps({
+                'result': ServerResponse.PUNCH,
+                'content': {
+                    'target': peer2, 
+                    'me': peer1, 
+                    'ip': peer2_addr['ip'],
+                    'port': peer2_addr['port'], 
+                    'cmd': ClientChildCmd.PUNCH,
+                    'repliedPublicKey': clientPublicKeys[peer2]
+                }
+            })
+            reply2 = json.dumps({
+                'result': ServerResponse.PUNCH,
+                'content': {
+                    'target': peer1, 
+                    'me': peer2, 
+                    'ip': peer1_addr['ip'],
+                    'port': peer1_addr['port'], 
+                    'cmd': ClientChildCmd.PUNCH,
+                    'repliedPublicKey': clientPublicKeys[peer1]
+                }
+            })
+
             client_addr[peer1].sendMessage(reply1.encode())
             client_addr[peer2].sendMessage(reply2.encode())
         else:
